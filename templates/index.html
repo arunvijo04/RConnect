@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Notice Board</title>
+    <link rel="stylesheet" href="static/style.css">
+</head>
+<body>
+    <div class="container">
+        <h1>Latest Notices</h1>
+        <div id="notices" class="notices-list"></div>
+        
+        <h2>Add a New Student</h2>
+        <form id="add-student-form">
+            <input type="text" id="student-name" placeholder="Enter Student Name" required>
+            <input type="text" id="student-chat-id" placeholder="Enter Chat ID" required>
+            <button type="submit">Add Student</button>
+        </form>
+
+        <h2>Students List</h2>
+        <div id="students-list"></div>
+    </div>
+
+    <script>
+        // Fetch the latest notices
+        fetch('/latest-notices')
+            .then(response => response.json())
+            .then(data => {
+                const noticesContainer = document.getElementById('notices');
+                if (data.length === 0) {
+                    noticesContainer.innerHTML = '<p>No notices available at the moment.</p>';
+                }
+                data.forEach(notice => {
+                    const noticeElement = document.createElement('div');
+                    noticeElement.classList.add('notice-item');
+                    noticeElement.innerHTML = `
+                        <h3 class="notice-title">${notice.title}</h3>
+                        <p class="notice-date"><strong>Date:</strong> ${notice.date}</p>
+                        <a href="${notice.link}" class="notice-link" target="_blank">View Notice</a>
+                    `;
+                    noticesContainer.appendChild(noticeElement);
+                });
+            })
+            .catch(error => {
+                console.error('Error fetching notices:', error);
+            });
+
+        // Fetch and display students
+        function fetchStudents() {
+            fetch('/students-info')
+                .then(response => response.json())
+                .then(data => {
+                    const studentsContainer = document.getElementById('students-list');
+                    studentsContainer.innerHTML = '';
+                    data.forEach(student => {
+                        const studentElement = document.createElement('div');
+                        studentElement.classList.add('student-item');
+                        studentElement.innerHTML = `
+                            <p>Name: ${student.name} (Chat ID: ${student.chat_id})</p>
+                            <button onclick="deleteStudent(${student.id})">Delete</button>
+                        `;
+                        studentsContainer.appendChild(studentElement);
+                    });
+                });
+        }
+
+        fetchStudents();
+
+        // Add student
+        document.getElementById('add-student-form').addEventListener('submit', function(event) {
+            event.preventDefault();
+            const name = document.getElementById('student-name').value;
+            const chat_id = document.getElementById('student-chat-id').value;
+
+            fetch('/add-student', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name, chat_id })
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.status);
+                fetchStudents();
+            })
+            .catch(error => {
+                console.error('Error adding student:', error);
+            });
+        });
+
+        // Delete student
+        function deleteStudent(studentId) {
+            if (confirm('Are you sure you want to delete this student?')) {
+                fetch(`/delete-student/${studentId}`, {
+                    method: 'DELETE'
+                })
+                .then(response => response.json())
+                .then(data => {
+                    alert(data.status);
+                    fetchStudents();
+                })
+                .catch(error => {
+                    console.error('Error deleting student:', error);
+                });
+            }
+        }
+    </script>
+</body>
+</html>
