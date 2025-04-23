@@ -62,19 +62,25 @@ def webhook():
         chat_id = data['message']['chat']['id']
         name = data['message']['chat'].get('first_name', 'Unknown')
         
-        print(f"Received chat ID: {chat_id}")  # This will help you debug
+        print(f"Received chat ID: {chat_id}")  # For debugging
 
-        # Store chat_id in the database
-        try:
-            c.execute("INSERT INTO students (name, chat_id) VALUES (?, ?)", (name, chat_id))
-            conn.commit()
-        except sqlite3.IntegrityError:
-            pass  # If student already exists, just ignore
+        # Check if the student is already registered
+        c.execute("SELECT * FROM students WHERE chat_id = ?", (chat_id,))
+        existing_student = c.fetchone()
 
-        # Send a welcome message
-        send_telegram(chat_id, "Welcome to the notice board bot! You are now registered.")
+        if existing_student:
+            send_telegram(chat_id, "You are already registered.")
+        else:
+            try:
+                c.execute("INSERT INTO students (name, chat_id) VALUES (?, ?)", (name, chat_id))
+                conn.commit()
+                notify_admin(name, chat_id)
+                send_telegram(chat_id, "Welcome to the notice board bot! You are now registered.")
+            except sqlite3.IntegrityError:
+                pass  # This should rarely happen now
 
     return jsonify({'status': 'ok'}), 200
+
 
 
 
