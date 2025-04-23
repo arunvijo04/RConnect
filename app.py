@@ -32,8 +32,13 @@ conn.commit()
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 @app.route('/')
-def index():
+def home():
     return render_template('index.html')
+
+@app.route('/students')
+def students():
+    return render_template('students.html')
+
 
 @app.route('/register', methods=['POST'])
 def register():
@@ -61,25 +66,40 @@ def webhook():
     if "message" in data:
         chat_id = data['message']['chat']['id']
         name = data['message']['chat'].get('first_name', 'Unknown')
-        
-        print(f"Received chat ID: {chat_id}")  # For debugging
+        text = data['message'].get('text', '').strip().lower()
 
-        # Check if the student is already registered
-        c.execute("SELECT * FROM students WHERE chat_id = ?", (chat_id,))
-        existing_student = c.fetchone()
+        print(f"Received chat ID: {chat_id}, Message: {text}")  # For debugging
 
-        if existing_student:
-            send_telegram(chat_id, "You are already registered.")
-        else:
-            try:
-                c.execute("INSERT INTO students (name, chat_id) VALUES (?, ?)", (name, chat_id))
-                conn.commit()
-                notify_admin(name, chat_id)
-                send_telegram(chat_id, "Welcome to the notice board bot! You are now registered.")
-            except sqlite3.IntegrityError:
-                pass  # This should rarely happen now
+        # Handle /notices command
+        if text == '/notices':
+            c.execute("SELECT title, date, link FROM notices ORDER BY id ASC LIMIT 10")
+            rows = c.fetchall()
+            if rows:
+                for row in rows:
+                    notice_msg = f"*{row[0]}*\n📅 {row[1]}\n[View Notice]({row[2]})"
+                    send_telegram(chat_id, notice_msg)
+            else:
+                send_telegram(chat_id, "No notices found.")
+            return jsonify({'status': 'notices sent'}), 200
+
+        # Handle /start command for registration
+        if text == '/start':
+            c.execute("SELECT * FROM students WHERE chat_id = ?", (chat_id,))
+            existing_student = c.fetchone()
+
+            if existing_student:
+                send_telegram(chat_id, "You are already registered.")
+            else:
+                try:
+                    c.execute("INSERT INTO students (name, chat_id) VALUES (?, ?)", (name, chat_id))
+                    conn.commit()
+                    notify_admin(name, chat_id)
+                    send_telegram(chat_id, "Welcome to the notice board bot! You are now registered.")
+                except sqlite3.IntegrityError:
+                    pass  # Handle if there's any integrity error (e.g., duplicate registration)
 
     return jsonify({'status': 'ok'}), 200
+
 
 
 
@@ -168,7 +188,7 @@ def scan():
 
 @app.route('/latest-notices', methods=['GET'])
 def latest_notices():
-    c.execute("SELECT title, date, link FROM notices ORDER BY id DESC LIMIT 10")
+    c.execute("SELECT title, date, link FROM notices ORDER BY id ASC LIMIT 10")
     notices = c.fetchall()
     return jsonify([{'title': r[0], 'date': r[1], 'link': r[2]} for r in notices])
 

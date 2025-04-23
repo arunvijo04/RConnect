@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Manage Students</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <div class="top-bar">
+    <h1>👥 Manage Students</h1>
+    <a href="/" class="nav-button">🏠 Back to Notices</a>
+  </div>
+
+  <div class="container">
+    <h2>Add New Student</h2>
+    <form id="add-student-form">
+      <div class="input-group">
+        <input type="text" id="student-name" placeholder="Enter Student Name" required />
+        <input type="text" id="student-chat-id" placeholder="Enter Chat ID" required />
+      </div>
+      <button type="submit">➕ Add Student</button>
+    </form>
+  
+    <h2>Students List</h2>
+    <div id="students-list"></div>
+  </div>
+  
+
+  <script>
+    function fetchStudents() {
+      fetch('/students-info')
+        .then(response => response.json())
+        .then(data => {
+          const container = document.getElementById('students-list');
+          container.innerHTML = '';
+          data.forEach(student => {
+            const el = document.createElement('div');
+            el.classList.add('student-item');
+            el.innerHTML = `
+              <p>👤 ${student.name} (ID: ${student.chat_id})</p>
+              <button onclick="deleteStudent(${student.id})">🗑 Delete</button>
+            `;
+            container.appendChild(el);
+          });
+        });
+    }
+
+    document.getElementById('add-student-form').addEventListener('submit', function(e) {
+      e.preventDefault();
+      const name = document.getElementById('student-name').value;
+      const chat_id = document.getElementById('student-chat-id').value;
+
+      fetch('/add-student', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name, chat_id })
+      }).then(res => res.json()).then(data => {
+        alert(data.status);
+        fetchStudents();
+      });
+    });
+
+    function deleteStudent(id) {
+      if (confirm("Delete this student?")) {
+        fetch(`/delete-student/${id}`, { method: 'DELETE' })
+          .then(res => res.json())
+          .then(data => {
+            alert(data.status);
+            fetchStudents();
+          });
+      }
+    }
+
+    fetchStudents();
+  </script>
+</body>
+</html>
