@@ -2,4 +2,5 @@ flask
 requests
 beautifulsoup4
 python-dotenv
+google-cloud-firestore
 gunicorn
