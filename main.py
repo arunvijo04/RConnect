@@ -59,7 +59,6 @@ def webhook():
                         f"📝 *Title:* _{n['title']}_\n"
                         f"📅 *Date:* `{n['date']}`\n"
                         f"🔗 [📄 View Notice]({n['link']})\n\n"
-                        "───────────────"
                     )
                     send_telegram(chat_id, msg)
             else:
@@ -188,7 +187,6 @@ def notify_students(notices):
                 f"📝 *Title:* _{notice['title']}_\n"
                 f"📅 *Date:* `{notice['date']}`\n"
                 f"🔗 [📄 View Notice]({notice['link']})\n\n"
-                "───────────────"
             )
             send_telegram(student['chat_id'], msg)
 
