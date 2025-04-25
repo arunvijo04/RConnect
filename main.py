@@ -10,8 +10,6 @@ import urllib.parse
 load_dotenv()
 
 app = Flask(__name__)
-
-# Initialize Firestore
 db = firestore.Client()
 
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
@@ -56,7 +54,7 @@ def webhook():
             notices = get_latest_notices()
             if notices:
                 for n in notices:
-                    msg = f"*{n['title']}*\n\U0001F4C5 {n['date']}\n[View Notice]({n['link']})"
+                    msg = f"*{n['title']}*\n📅 {n['date']}\n[View Notice]({n['link']})"
                     send_telegram(chat_id, msg)
             else:
                 send_telegram(chat_id, "No notices found.")
@@ -72,89 +70,65 @@ def webhook():
 
     return jsonify({'status': 'ok'}), 200
 
-
-def fetch_notices():
-    base_url = "https://www.rajagiritech.ac.in/home/notice/Notice.asp?page="
-    new_notices = []
-
-    for page in range(1, 11):
-        url = base_url + str(page)
-        try:
-            response = requests.get(url, timeout=10)
-            response.raise_for_status()
-        except requests.RequestException as e:
-            print(f"[Error] Could not load page {page}: {e}")
-            continue
-
-        soup = BeautifulSoup(response.text, 'html.parser')
-        table_rows = soup.select('table tr')[1:]
-
-        for row in table_rows:
-            cols = row.find_all('td')
-            if len(cols) < 3:
-                continue
-
-            date = cols[1].get_text(strip=True)
-            title = cols[2].get_text(strip=True)
-            link_tag = cols[2].find('a')
-            link = "https://www.rajagiritech.ac.in/home/notice/" + link_tag['href'] if link_tag else ""
-
-            if not link:
-                continue
-
-            if not notice_exists(link):
-                store_notice(title, date, link)
-                new_notices.append({'title': title, 'date': date, 'link': link})
-
-    return new_notices
-
-
 def extract_notice_id(link):
     parsed = urllib.parse.urlparse(link)
     query_params = urllib.parse.parse_qs(parsed.query)
     return query_params.get("NID", [None])[0]
 
+def get_last_nid():
+    doc = db.collection('metadata').document('last_notice').get()
+    if doc.exists:
+        return doc.to_dict().get('last_nid', 0)
+    return 0
 
-def send_telegram(chat_id, text):
-    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "Markdown",
-        "disable_web_page_preview": True
-    }
+def update_last_nid(nid):
+    db.collection('metadata').document('last_notice').set({'last_nid': nid})
+
+def fetch_notices(since_nid=0):
+    base_url = "https://www.rajagiritech.ac.in/home/notice/Notice.asp?page=1"
+    new_notices = []
+    max_nid = since_nid
+
     try:
-        res = requests.post(url, data=payload)
-        res.raise_for_status()
-    except Exception as e:
-        print(f"Error sending message to {chat_id}: {e}")
+        response = requests.get(base_url, timeout=10)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"[Error] Could not load page 1: {e}")
+        return []
 
+    soup = BeautifulSoup(response.text, 'html.parser')
+    table_rows = soup.select('table tr')[1:]
 
-def notify_admin(name, chat_id):
-    send_telegram(ADMIN_CHAT_ID, f"\U0001F464 New student registered:\nName: {name}\nChat ID: `{chat_id}`")
+    for row in table_rows:
+        cols = row.find_all('td')
+        if len(cols) < 3:
+            continue
 
+        date = cols[1].get_text(strip=True)
+        title = cols[2].get_text(strip=True)
+        link_tag = cols[2].find('a')
+        link = "https://www.rajagiritech.ac.in/home/notice/" + link_tag['href'] if link_tag else ""
+        if not link:
+            continue
 
-def student_exists(chat_id):
-    return db.collection('students').document(chat_id).get().exists
+        notice_id = extract_notice_id(link)
+        if not notice_id:
+            notice_id = hashlib.sha256(link.encode()).hexdigest()
+            nid = 0
+        else:
+            nid = int(notice_id)
 
+        if nid <= since_nid:
+            break  # Stop immediately — already seen or old
 
-def register_student(name, chat_id):
-    db.collection('students').document(chat_id).set({
-        'name': name,
-        'chat_id': chat_id
-    })
+        store_notice(title, date, link)
+        new_notices.append({'title': title, 'date': date, 'link': link})
+        max_nid = max(max_nid, nid)
 
+    if new_notices:
+        update_last_nid(max_nid)
 
-def get_all_students():
-    return [doc.to_dict() for doc in db.collection('students').stream()]
-
-
-def notify_students(notices):
-    for student in get_all_students():
-        for notice in notices:
-            msg = f"*New Notice*\n{notice['title']}\n*Date:* {notice['date']}\n[View Notice]({notice['link']})"
-            send_telegram(student['chat_id'], msg)
-
+    return new_notices
 
 def store_notice(title, date, link):
     notice_id = extract_notice_id(link)
@@ -170,47 +144,65 @@ def store_notice(title, date, link):
         'link': link
     })
 
+def send_telegram(chat_id, text):
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": text,
+        "parse_mode": "Markdown",
+        "disable_web_page_preview": True
+    }
+    try:
+        res = requests.post(url, data=payload)
+        res.raise_for_status()
+    except Exception as e:
+        print(f"Error sending message to {chat_id}: {e}")
 
+def notify_admin(name, chat_id):
+    send_telegram(ADMIN_CHAT_ID, f"👤 New student registered:\nName: {name}\nChat ID: `{chat_id}`")
 
+def student_exists(chat_id):
+    return db.collection('students').document(chat_id).get().exists
 
-def notice_exists(link):
-    notice_id = extract_notice_id(link)
-    if not notice_id:
-        notice_id = hashlib.sha256(link.encode()).hexdigest()
-    
-    return db.collection('notices').document(notice_id).get().exists
+def register_student(name, chat_id):
+    db.collection('students').document(chat_id).set({
+        'name': name,
+        'chat_id': chat_id
+    })
 
+def get_all_students():
+    return [doc.to_dict() for doc in db.collection('students').stream()]
 
+def notify_students(notices):
+    for student in get_all_students():
+        for notice in notices:
+            msg = f"*New Notice*\n{notice['title']}\n*Date:* {notice['date']}\n[View Notice]({notice['link']})"
+            send_telegram(student['chat_id'], msg)
 
 def get_latest_notices(limit=10):
     docs = db.collection('notices').order_by('nid', direction=firestore.Query.DESCENDING).limit(limit).stream()
     return [doc.to_dict() for doc in docs]
 
-
-
 @app.route('/scan', methods=['GET'])
 def scan():
-    notices = fetch_notices()
-    if notices:
-        notify_students(notices)
-    return jsonify({'new_notices': notices})
-
+    last_nid = get_last_nid()
+    new_notices = fetch_notices(since_nid=last_nid)
+    if new_notices:
+        notify_students(new_notices)
+    return jsonify({'new_notices': new_notices})
 
 @app.route('/latest-notices', methods=['GET'])
 def latest_notices():
     return jsonify(get_latest_notices())
-
 
 @app.route('/notices', methods=['GET'])
 def get_notices():
     docs = db.collection('notices').order_by('date', direction=firestore.Query.ASCENDING).stream()
     return jsonify([doc.to_dict() for doc in docs])
 
-
 @app.route('/students-info', methods=['GET'])
 def get_students_info():
     return jsonify(get_all_students())
-
 
 @app.route('/add-student', methods=['POST'])
 def add_student():
@@ -222,12 +214,10 @@ def add_student():
     register_student(name, chat_id)
     return jsonify({'status': 'Student added successfully'}), 201
 
-
 @app.route('/delete-student/<chat_id>', methods=['DELETE'])
 def delete_student(chat_id):
     db.collection('students').document(chat_id).delete()
     return jsonify({'status': 'Student deleted successfully'}), 200
-
 
 if __name__ == '__main__':
     port = int(os.environ.get("PORT", 5000))
