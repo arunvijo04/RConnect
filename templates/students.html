@@ -39,7 +39,7 @@
             el.classList.add('student-item');
             el.innerHTML = `
               <p>👤 ${student.name} (ID: ${student.chat_id})</p>
-              <button onclick="deleteStudent(${student.id})">🗑 Delete</button>
+              <button onclick="deleteStudent('${student.chat_id}')">🗑 Delete</button>
             `;
             container.appendChild(el);
           });
@@ -61,16 +61,16 @@
       });
     });
 
-    function deleteStudent(id) {
-      if (confirm("Delete this student?")) {
-        fetch(`/delete-student/${id}`, { method: 'DELETE' })
-          .then(res => res.json())
-          .then(data => {
-            alert(data.status);
-            fetchStudents();
-          });
-      }
-    }
+    function deleteStudent(chat_id) {
+  if (confirm("Delete this student?")) {
+    fetch(`/delete-student/${chat_id}`, { method: 'DELETE' })
+      .then(res => res.json())
+      .then(data => {
+        alert(data.status);
+        fetchStudents();
+      });
+  }
+}
 
     fetchStudents();
   </script>
