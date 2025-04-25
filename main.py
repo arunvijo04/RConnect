@@ -54,11 +54,18 @@ def webhook():
             notices = get_latest_notices()
             if notices:
                 for n in notices:
-                    msg = f"*{n['title']}*\n📅 {n['date']}\n[View Notice]({n['link']})"
+                    msg = (
+                        "📢 *Recent Notice*\n\n"
+                        f"📝 *Title:* _{n['title']}_\n"
+                        f"📅 *Date:* `{n['date']}`\n"
+                        f"🔗 [📄 View Notice]({n['link']})\n\n"
+                        "───────────────"
+                    )
                     send_telegram(chat_id, msg)
             else:
-                send_telegram(chat_id, "No notices found.")
+                send_telegram(chat_id, "🚫 No recent notices found.")
             return jsonify({'status': 'notices sent'}), 200
+
 
         if text == '/start':
             if student_exists(chat_id):
@@ -176,8 +183,15 @@ def get_all_students():
 def notify_students(notices):
     for student in get_all_students():
         for notice in notices:
-            msg = f"*New Notice*\n{notice['title']}\n*Date:* {notice['date']}\n[View Notice]({notice['link']})"
+            msg = (
+                "📢 *New College Notice!*\n\n"
+                f"📝 *Title:* _{notice['title']}_\n"
+                f"📅 *Date:* `{notice['date']}`\n"
+                f"🔗 [📄 View Notice]({notice['link']})\n\n"
+                "───────────────"
+            )
             send_telegram(student['chat_id'], msg)
+
 
 def get_latest_notices(limit=10):
     docs = db.collection('notices').order_by('nid', direction=firestore.Query.DESCENDING).limit(limit).stream()
